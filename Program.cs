@@ -2,14 +2,11 @@
 using OfficeOpenXml;
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Windows.Forms;
+using System.Text;
 
 namespace VersionInfoGenerator
 {
@@ -30,7 +27,7 @@ namespace VersionInfoGenerator
 			Console.WriteLine("*  -x 转换完毕不等待用户按键，直接退出。");
 			Console.WriteLine("************************************");
 
-			// 读取参数，判断是否莹直接退出
+			// 读取参数，判断是否应直接退出
 			bool bReadKeyBeforeExit = true;
 
 			foreach (string arg in args)
@@ -67,11 +64,12 @@ namespace VersionInfoGenerator
 				{
 					diOutput.Create();
 					Thread.Sleep(200);
+					diOutput = new DirectoryInfo(strOutputDir);
 				}
-				catch (Exception Ex)
+				catch (Exception ex)
 				{
-					Debug.WriteLine(Ex.Message);
-					Console.WriteLine(Ex.Message);
+					Debug.WriteLine(ex.Message);
+					Console.WriteLine(ex.Message);
 					Console.WriteLine("输出目录创建失败。");
 
 					// 退出程序
@@ -110,83 +108,144 @@ namespace VersionInfoGenerator
 							continue;
 						}
 
-						Console.WriteLine("====== {0} ======", strWorksheetLowerName);
+						Console.WriteLine("====== {0} ======", strWorksheetName);
 
-						List<string> RowNameList = new List<string>();
-						List<string> ColumnNameList = new List<string>();
-						int RowNo = 1;
-						int ColNo = 2;
+						// 确保输出路径存在
+						string strWorksheetOutputDir = strOutputDir + "\\" + strWorksheetName;
+						DirectoryInfo diWorksheetOutput = new DirectoryInfo(strWorksheetOutputDir);
 
-						ColumnNameList.Add("Column_0");
-						ColumnNameList.Add("Column_1");
+						while (!diWorksheetOutput.Exists)
+						{
+							try
+							{
+								diWorksheetOutput.Create();
+								Thread.Sleep(200);
+								diWorksheetOutput = new DirectoryInfo(strWorksheetOutputDir);
+							}
+							catch (Exception ex)
+							{
+								Debug.WriteLine(ex.Message);
+								Console.WriteLine(ex.Message);
+								Console.WriteLine("输出目录创建失败。");
+
+								// 退出程序
+								if (bReadKeyBeforeExit)
+								{
+									Console.ReadKey();
+									return;
+								}
+							}
+						}
+
+						List<string> listRowNames = new List<string>();
+						List<string> listColumnNames = new List<string>();
+						int nRowNo = 1;
+						int nColNo = 2;
+
+						listColumnNames.Add("Column_0");
+						listColumnNames.Add("Column_1");
 
 						while (true)
 						{
-							object CellData = worksheet.Cells[RowNo, ColNo++].Value;
+							object objCellData = worksheet.Cells[nRowNo, nColNo++].Value;
 
-							if (null == CellData)
+							if (null == objCellData)
 							{
 								break;
 							}
 
-							string CellDataString = CellData.ToString().Trim();
+							string strCellData = objCellData.ToString().Trim();
 
-							if (0 == CellDataString.Length)
+							if (0 == strCellData.Length)
 							{
 								break;
 							}
 
-							ColumnNameList.Add(CellDataString);
+							listColumnNames.Add(strCellData);
 						}
 
-						RowNo = 2;
-						ColNo = 1;
-						RowNameList.Add("Row_0");
-						RowNameList.Add("Row_1");
+						nRowNo = 2;
+						nColNo = 1;
+						listRowNames.Add("Row_0");
+						listRowNames.Add("Row_1");
 
 						while (true)
 						{
-							object CellData = worksheet.Cells[RowNo++, ColNo].Value;
+							object objCellData = worksheet.Cells[nRowNo++, nColNo].Value;
 
-							if (null == CellData)
+							if (null == objCellData)
 							{
 								break;
 							}
 
-							string CellDataString = CellData.ToString().Trim();
+							string strCellData = objCellData.ToString().Trim();
 
-							if (0 == CellDataString.Length)
+							if (0 == strCellData.Length)
 							{
 								break;
 							}
 
-							RowNameList.Add(CellDataString);
+							listRowNames.Add(strCellData);
 						}
 
-						string[] RowNames = RowNameList.ToArray();
-						string[] ColumnNames = ColumnNameList.ToArray();
+						string[] strRowNames = listRowNames.ToArray();
+						string[] strColumnNames = listColumnNames.ToArray();
 
-						RowNameList.Clear();
-						ColumnNameList.Clear();
-						RowNameList = null;
-						ColumnNameList = null;
+						listRowNames.Clear();
+						listColumnNames.Clear();
+						listRowNames = null;
+						listColumnNames = null;
 
-						for (ColNo = 2; ColNo < ColumnNames.Length; ColNo++)
+						for (nColNo = 2; nColNo < strColumnNames.Length; nColNo++)
 						{
 							Dictionary<string, object> dicJsonRoot = new Dictionary<string, object>();
 
-							for (RowNo = 2; RowNo < RowNames.Length; RowNo++)
+							for (nRowNo = 2; nRowNo < strRowNames.Length; nRowNo++)
 							{
-								dicJsonRoot.Add(RowNames[RowNo], worksheet.Cells[RowNo, ColNo].Value);
+								object objCellData = worksheet.Cells[nRowNo, nColNo].Value;
+
+								if (null == objCellData)
+								{
+									dicJsonRoot.Add(strRowNames[nRowNo], objCellData);
+								}
+								else
+								{
+									Type typeCellData = objCellData.GetType();
+
+									if (typeof(float) == typeCellData || typeof(double) == typeCellData)
+									{
+										dicJsonRoot.Add(strRowNames[nRowNo], Convert.ToInt64(objCellData));
+									}
+									else
+									{
+										dicJsonRoot.Add(strRowNames[nRowNo], objCellData);
+									}
+								}
 							}
 
-							Console.WriteLine("--- {0}.json ---", ColumnNames[ColNo]);
+							Console.WriteLine("--- {0}.json ---", strColumnNames[nColNo]);
 							Console.WriteLine(JsonConvert.SerializeObject(dicJsonRoot, Formatting.Indented));
+
+							using (FileStream fsJson = File.Create(strWorksheetOutputDir + "\\" + strColumnNames[nColNo] + ".json"))
+							{
+								byte[] byteJsonData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(dicJsonRoot, Formatting.None));
+
+								try
+								{
+									fsJson.Write(byteJsonData, 0, byteJsonData.Length);
+								}
+								catch (Exception ex)
+								{
+									Debug.WriteLine(ex.Message);
+									Console.WriteLine(ex.Message);
+								}
+							}
 						}
 					}
 				}
 			}
 
+			Console.WriteLine("转换完成。");
 			// 退出程序
 			if (bReadKeyBeforeExit)
 			{
