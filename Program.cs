@@ -214,7 +214,17 @@ namespace VersionInfoGenerator
 
 									if (typeof(float) == typeCellData || typeof(double) == typeCellData)
 									{
-										dicJsonRoot.Add(strRowNames[nRowNo], Convert.ToInt64(objCellData));
+										Double nCellData = Convert.ToDouble(objCellData);
+										nCellData -= Math.Truncate(nCellData);
+
+										if (Math.Abs(nCellData) < 0.0001)
+										{
+											dicJsonRoot.Add(strRowNames[nRowNo], Convert.ToInt64(objCellData));
+										}
+										else
+										{
+											dicJsonRoot.Add(strRowNames[nRowNo], objCellData);
+										}
 									}
 									else
 									{
